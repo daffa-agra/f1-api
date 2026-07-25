@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.database import async_session_factory
+import app.database as db
 from app.models.session import Session
 from app.models.lap import Lap
 from app.models.pit_stop import PitStop
@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 async def get_session() -> AsyncSession:
-    async with async_session_factory() as session:
+    async with db.async_session_factory() as session:
         yield session
 
 

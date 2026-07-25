@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
-from app.database import async_session_factory
+import app.database as db
 from app.models.race import Race
 from app.schemas.race import RaceResponse
 
@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 async def get_session() -> AsyncSession:
-    async with async_session_factory() as session:
+    async with db.async_session_factory() as session:
         yield session
 
 

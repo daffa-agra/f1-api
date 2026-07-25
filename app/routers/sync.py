@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, Header, HTTPException
 
-from app.database import async_session_factory
+import app.database as db
 from app.services.data_loader import DataLoader
 
 router = APIRouter()
 
 
 async def get_session():
-    async with async_session_factory() as session:
+    async with db.async_session_factory() as session:
         yield session
 
 
