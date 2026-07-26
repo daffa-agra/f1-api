@@ -32,7 +32,10 @@ def phase1_extract():
         session = fastf1.get_session(2026, round_number, 'R')
         try:
             session.load(laps=True, telemetry=False, weather=False, messages=False)
-            df = session.laps
+            try:
+                df = session.laps
+            except Exception:
+                df = session._laps
         except Exception as exc:
             print(f'Failed to load round {round_number}: {exc}')
             continue
