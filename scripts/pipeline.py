@@ -3,7 +3,7 @@ import sys
 
 import fastf1
 import pandas as pd
-from tableauhyperapi import Connection, CreateMode, HyperProcess, Inserter, SqlType, Telemetry, TableDefinition, TableName, TableDefinition, TableName
+from tableauhyperapi import Connection, CreateMode, HyperProcess, Inserter, SqlType, Telemetry, TableDefinition, TableName
 import tableauserverclient as TSC
 
 
