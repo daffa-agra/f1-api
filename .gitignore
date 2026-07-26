@@ -17,6 +17,8 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 fastf1_cache/
+./data/cache/
+*.hyper
 *.db
 *.sqlite
 *.log
