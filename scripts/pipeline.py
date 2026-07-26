@@ -26,6 +26,7 @@ def phase1_extract():
         print('No completed rounds found for 2026.')
         sys.exit(0)
     rounds = sorted(completed['RoundNumber'].unique(), reverse=True)
+    frames = []
     for round_number in rounds:
         print(f'Trying round {round_number}...')
         session = fastf1.get_session(2026, round_number, 'R')
@@ -38,10 +39,17 @@ def phase1_extract():
         if df is None or df.empty:
             print(f'No lap data available for round {round_number}.')
             continue
-        print(f'Using round {round_number} ({session.event["EventName"]}).')
-        return df
-    print('No usable lap data found for any completed 2026 round.')
-    sys.exit(0)
+        df = df.copy()
+        df['RoundNumber'] = round_number
+        df['EventName'] = session.event.get('EventName', '')
+        print(f'Loaded round {round_number} ({session.event["EventName"]}): {len(df)} laps.')
+        frames.append(df)
+    if not frames:
+        print('No usable lap data found for any completed 2026 round.')
+        sys.exit(0)
+    combined = pd.concat(frames, ignore_index=True)
+    print(f'Total laps loaded: {len(combined)} from {len(frames)} rounds.')
+    return combined
 
 
 def phase2_sqlite(df):
@@ -51,7 +59,7 @@ def phase2_sqlite(df):
     conn.close()
 
 
-def dtype_to_sqltype(dtype):
+def dtype_to_sqltype(dtype, sample=None):
     if pd.api.types.is_float_dtype(dtype):
         return SqlType.double()
     if pd.api.types.is_integer_dtype(dtype):
@@ -60,18 +68,28 @@ def dtype_to_sqltype(dtype):
         return SqlType.bool()
     if pd.api.types.is_datetime64_any_dtype(dtype):
         return SqlType.timestamp()
+    if dtype == object and sample is not None:
+        non_null = sample.dropna()
+        if len(non_null) > 0 and all(isinstance(v, bool) for v in non_null):
+            return SqlType.bool()
     return SqlType.text()
 
 
 def phase3_hyper(df):
     df = df.copy()
+    column_types = {col: dtype_to_sqltype(df[col].dtype, sample=df[col]) for col in df.columns}
     for col in df.columns:
-        if pd.api.types.is_timedelta64_dtype(df[col].dtype):
-            df[col] = df[col].astype(object).apply(lambda x: str(x) if pd.notna(x) else None)
-        elif pd.api.types.is_datetime64_dtype(df[col].dtype):
-            df[col] = df[col].dt.tz_localize(None) if getattr(df[col].dt, 'tz', None) is not None else df[col]
+        sql_type = column_types[col]
+        if sql_type == SqlType.bool():
             df[col] = df[col].astype(object).apply(lambda x: x if pd.notna(x) else None)
-        elif pd.api.types.is_float_dtype(df[col].dtype) or pd.api.types.is_integer_dtype(df[col].dtype):
+        elif sql_type == SqlType.text():
+            if pd.api.types.is_timedelta64_dtype(df[col].dtype):
+                df[col] = df[col].astype(object).apply(lambda x: str(x) if pd.notna(x) else None)
+            else:
+                df[col] = df[col].astype(object).apply(lambda x: str(x) if pd.notna(x) else None)
+        elif sql_type in (SqlType.double(), SqlType.big_int(), SqlType.timestamp()):
+            if pd.api.types.is_datetime64_dtype(df[col].dtype):
+                df[col] = df[col].dt.tz_localize(None) if getattr(df[col].dt, 'tz', None) is not None else df[col]
             df[col] = df[col].astype(object).apply(lambda x: x if pd.notna(x) else None)
     with HyperProcess(telemetry=Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU) as hyper:
         with Connection(endpoint=hyper.endpoint, create_mode=CreateMode.CREATE_AND_REPLACE, database=HYPER_PATH) as connection:
@@ -79,7 +97,7 @@ def phase3_hyper(df):
             table = TableName(schema, 'LapTimes')
             table_def = TableDefinition(table)
             for col in df.columns:
-                table_def.add_column(str(col), dtype_to_sqltype(df[col].dtype))
+                table_def.add_column(str(col), column_types[col])
             connection.catalog.create_schema(schema)
             connection.catalog.create_table(table_def)
             with Inserter(connection, table) as inserter:
